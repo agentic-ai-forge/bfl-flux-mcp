@@ -975,9 +975,7 @@ class TestExpandImage:
             }
         )
 
-        result = await _expand_image(
-            mock_client, {"image": "base64data", "top": 256, "right": 128}
-        )
+        result = await _expand_image(mock_client, {"image": "base64data", "top": 256, "right": 128})
 
         assert len(result) == 1
         assert "Image expanded successfully" in result[0].text
@@ -1020,9 +1018,7 @@ class TestExpandImage:
             return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
         )
 
-        await _expand_image(
-            mock_client, {"image": "data", "left": 100, "prompt": "extend the sky"}
-        )
+        await _expand_image(mock_client, {"image": "data", "left": 100, "prompt": "extend the sky"})
 
         call_args = mock_client.submit.call_args
         payload = call_args[0][1]
