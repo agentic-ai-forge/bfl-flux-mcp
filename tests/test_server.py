@@ -461,6 +461,26 @@ class TestGenerateImage:
         assert "..." in result[0].text
         assert "A" * 100 in result[0].text
 
+    @pytest.mark.asyncio
+    async def test_credits_shown_in_output(self):
+        """Credits used are shown in output when available."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={
+                "status": "Ready",
+                "result": {"sample": "https://example.com/img.png"},
+                "cost": 4,
+            }
+        )
+
+        result = await _generate_image(mock_client, {"prompt": "test"})
+
+        assert "**Credits used:** 4" in result[0].text
+        assert "$0.04" in result[0].text
+
 
 class TestEditImage:
     """Tests for edit_image tool."""
@@ -568,6 +588,26 @@ class TestEditImage:
         await _edit_image(mock_client, {"prompt": "test", "image": "data"})
 
         mock_client.wait_for_completion.assert_called_once_with("task-123", polling_url)
+
+    @pytest.mark.asyncio
+    async def test_credits_shown_in_output(self):
+        """Credits used are shown in edit output when available."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={
+                "status": "Ready",
+                "result": {"sample": "https://example.com/img.png"},
+                "cost": 8,
+            }
+        )
+
+        result = await _edit_image(mock_client, {"prompt": "test", "image": "data"})
+
+        assert "**Credits used:** 8" in result[0].text
+        assert "$0.08" in result[0].text
 
 
 class TestCallTool:

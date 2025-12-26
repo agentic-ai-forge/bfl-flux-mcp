@@ -365,11 +365,18 @@ async def _generate_image(client: BFLClient, args: dict[str, Any]) -> list[TextC
 
         result = await client.wait_for_completion(task_id, polling_url)
 
-        # Extract image URL
+        # Extract image URL and cost
         image_url = _extract_image_url(result)
+        cost = result.get("cost")
 
         prompt_display = args["prompt"][:100]
         prompt_suffix = "..." if len(args["prompt"]) > 100 else ""
+
+        cost_info = ""
+        if cost is not None:
+            usd = cost * 0.01
+            cost_info = f"**Credits used:** {cost} (${usd:.2f})\n"
+
         return [
             TextContent(
                 type="text",
@@ -377,6 +384,7 @@ async def _generate_image(client: BFLClient, args: dict[str, Any]) -> list[TextC
                     f"Image generated successfully!\n\n"
                     f"**Model:** {model}\n"
                     f"**Prompt:** {prompt_display}{prompt_suffix}\n"
+                    f"{cost_info}"
                     f"**Image URL:** {image_url}\n\n"
                     f"Note: URL is valid for 10 minutes. Download or use immediately."
                 ),
@@ -421,11 +429,18 @@ async def _edit_image(client: BFLClient, args: dict[str, Any]) -> list[TextConte
 
         result = await client.wait_for_completion(task_id, polling_url)
 
-        # Extract image URL
+        # Extract image URL and cost
         image_url = _extract_image_url(result)
+        cost = result.get("cost")
 
         prompt_display = args["prompt"][:100]
         prompt_suffix = "..." if len(args["prompt"]) > 100 else ""
+
+        cost_info = ""
+        if cost is not None:
+            usd = cost * 0.01
+            cost_info = f"**Credits used:** {cost} (${usd:.2f})\n"
+
         return [
             TextContent(
                 type="text",
@@ -433,6 +448,7 @@ async def _edit_image(client: BFLClient, args: dict[str, Any]) -> list[TextConte
                     f"Image edited successfully!\n\n"
                     f"**Model:** {model}\n"
                     f"**Edit instruction:** {prompt_display}{prompt_suffix}\n"
+                    f"{cost_info}"
                     f"**Result URL:** {image_url}\n\n"
                     f"Note: URL is valid for 10 minutes. Download or use immediately."
                 ),
