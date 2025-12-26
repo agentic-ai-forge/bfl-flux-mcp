@@ -10,6 +10,7 @@ API Reference: https://docs.bfl.ml
 """
 
 import asyncio
+import base64
 import os
 import time
 from pathlib import Path
@@ -228,7 +229,7 @@ async def list_tools() -> list[Tool]:
             name="edit_image",
             description=(
                 "Edit an existing image using natural language instructions. "
-                "Provide either a base64-encoded image or a URL. "
+                "Provide a local file path, URL, or base64-encoded image. "
                 "Models: kontext-pro (balanced), kontext-max (highest quality), "
                 "fill-pro (inpainting)."
             ),
@@ -241,7 +242,9 @@ async def list_tools() -> list[Tool]:
                     },
                     "image": {
                         "type": "string",
-                        "description": "Base64-encoded image data or URL of the image to edit",
+                        "description": (
+                            "Image to edit: local file path, URL, or base64-encoded data"
+                        ),
                     },
                     "model": {
                         "type": "string",
@@ -492,10 +495,20 @@ async def _edit_image(client: BFLClient, args: dict[str, Any]) -> list[TextConte
     model = args.get("model", "kontext-pro")
     endpoint = model_map.get(model, "v1/flux-kontext-pro")
 
+    # Handle image input: local file path, URL, or base64
+    image_input = args["image"]
+    if _is_local_file(image_input):
+        try:
+            image_input = _encode_image_to_base64(image_input)
+        except FileNotFoundError as e:
+            return [TextContent(type="text", text=f"Error: {e!s}")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error reading image file: {e!s}")]
+
     # Build payload
     payload: dict[str, Any] = {
         "prompt": args["prompt"],
-        "input_image": args["image"],  # Can be base64 or URL
+        "input_image": image_input,
     }
 
     # Optional params
@@ -542,6 +555,27 @@ async def _edit_image(client: BFLClient, args: dict[str, Any]) -> list[TextConte
 
     except Exception as e:
         return [TextContent(type="text", text=f"Error: {e!s}")]
+
+
+def _is_local_file(image_input: str) -> bool:
+    """Check if input is a local file path (not URL or base64)."""
+    # URLs are passed directly
+    if image_input.startswith(("http://", "https://", "data:")):
+        return False
+    # Base64 strings are typically very long with no path separators after initial chars
+    if len(image_input) > 500 and "/" not in image_input[10:]:
+        return False
+    # Check if the path exists on the filesystem
+    return Path(image_input).exists()
+
+
+def _encode_image_to_base64(file_path: str) -> str:
+    """Read a local image file and return base64-encoded data."""
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Image file not found: {file_path}")
+    image_bytes = path.read_bytes()
+    return base64.b64encode(image_bytes).decode("utf-8")
 
 
 def _extract_image_url(result: dict[str, Any]) -> str:

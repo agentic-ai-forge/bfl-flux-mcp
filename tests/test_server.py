@@ -9,8 +9,10 @@ from bfl_flux_mcp.server import (
     BFLClient,
     _check_credits,
     _edit_image,
+    _encode_image_to_base64,
     _extract_image_url,
     _generate_image,
+    _is_local_file,
     _save_image,
     call_tool,
     get_client,
@@ -809,3 +811,143 @@ class TestSaveImage:
             result = await _save_image(args)
 
             assert "does not point to an image" in result[0].text
+
+
+class TestIsLocalFile:
+    """Tests for _is_local_file helper."""
+
+    def test_http_url_returns_false(self):
+        """HTTP URLs are not local files."""
+        assert _is_local_file("http://example.com/image.png") is False
+
+    def test_https_url_returns_false(self):
+        """HTTPS URLs are not local files."""
+        assert _is_local_file("https://example.com/image.png") is False
+
+    def test_data_uri_returns_false(self):
+        """Data URIs are not local files."""
+        assert _is_local_file("data:image/png;base64,abc123") is False
+
+    def test_long_base64_returns_false(self):
+        """Long strings without path separators are assumed to be base64."""
+        long_base64 = "A" * 600
+        assert _is_local_file(long_base64) is False
+
+    def test_existing_file_returns_true(self, tmp_path):
+        """Existing files return True."""
+        test_file = tmp_path / "test.png"
+        test_file.write_bytes(b"fake image data")
+        assert _is_local_file(str(test_file)) is True
+
+    def test_nonexistent_file_returns_false(self):
+        """Non-existent paths return False."""
+        assert _is_local_file("/nonexistent/path/to/image.png") is False
+
+
+class TestEncodeImageToBase64:
+    """Tests for _encode_image_to_base64 helper."""
+
+    def test_encodes_file_correctly(self, tmp_path):
+        """Correctly encodes file to base64."""
+        test_file = tmp_path / "test.png"
+        test_data = b"fake image data for testing"
+        test_file.write_bytes(test_data)
+
+        import base64
+
+        expected = base64.b64encode(test_data).decode("utf-8")
+        result = _encode_image_to_base64(str(test_file))
+
+        assert result == expected
+
+    def test_raises_on_missing_file(self):
+        """Raises FileNotFoundError for missing files."""
+        with pytest.raises(FileNotFoundError, match="Image file not found"):
+            _encode_image_to_base64("/nonexistent/image.png")
+
+
+class TestEditImageWithLocalFile:
+    """Tests for edit_image with local file paths."""
+
+    @pytest.mark.asyncio
+    async def test_local_file_converted_to_base64(self, tmp_path):
+        """Local file paths are converted to base64 before API call."""
+        # Create a test image file
+        test_file = tmp_path / "test.png"
+        test_data = b"PNG fake image data"
+        test_file.write_bytes(test_data)
+
+        import base64
+
+        expected_base64 = base64.b64encode(test_data).decode("utf-8")
+
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/edited.png"}}
+        )
+
+        await _edit_image(mock_client, {"prompt": "Add shadow", "image": str(test_file)})
+
+        call_args = mock_client.submit.call_args
+        payload = call_args[0][1]
+        assert payload["input_image"] == expected_base64
+
+    @pytest.mark.asyncio
+    async def test_nonexistent_path_passed_to_api(self):
+        """Non-existent paths are passed to API (treated as URL/base64 attempt)."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/edited.png"}}
+        )
+
+        # Since the file doesn't exist, _is_local_file returns False,
+        # and the path is passed directly to the API which will fail.
+        await _edit_image(mock_client, {"prompt": "Add shadow", "image": "/nonexistent/image.png"})
+
+        # The path string is passed directly to API
+        call_args = mock_client.submit.call_args
+        payload = call_args[0][1]
+        assert payload["input_image"] == "/nonexistent/image.png"
+
+    @pytest.mark.asyncio
+    async def test_url_passed_directly(self):
+        """URLs are passed directly without modification."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/edited.png"}}
+        )
+
+        image_url = "https://example.com/source.png"
+        await _edit_image(mock_client, {"prompt": "Add shadow", "image": image_url})
+
+        call_args = mock_client.submit.call_args
+        payload = call_args[0][1]
+        assert payload["input_image"] == image_url
+
+    @pytest.mark.asyncio
+    async def test_base64_passed_directly(self):
+        """Base64 strings are passed directly without modification."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/edited.png"}}
+        )
+
+        # Long base64 string (>500 chars, no slashes)
+        base64_data = "A" * 600
+        await _edit_image(mock_client, {"prompt": "Add shadow", "image": base64_data})
+
+        call_args = mock_client.submit.call_args
+        payload = call_args[0][1]
+        assert payload["input_image"] == base64_data
