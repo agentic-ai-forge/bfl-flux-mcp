@@ -74,6 +74,15 @@ class BFLClient:
 
         raise Exception("Task timed out")
 
+    async def get_credits(self) -> dict[str, Any]:
+        """Get account credit balance."""
+        response = await self.client.get(
+            "/v1/credits",
+            headers={"x-key": self.api_key},
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def close(self):
         await self.client.aclose()
 
@@ -102,8 +111,8 @@ async def list_tools() -> list[Tool]:
             description=(
                 "Generate an image from a text prompt using BFL Flux models. "
                 "Returns the URL of the generated image (valid for 10 minutes). "
-                "Models: flux-pro (best quality), flux-dev (fast), flux-pro-1.1 (balanced), "
-                "flux-2-pro (latest), flux-2-dev (latest fast)."
+                "Models: flux-schnell (free/fast), flux-dev (free/good), flux-pro-1.1 (best), "
+                "flux-2-pro (latest), flux-2-flex (adjustable steps/guidance)."
             ),
             inputSchema={
                 "type": "object",
@@ -114,14 +123,14 @@ async def list_tools() -> list[Tool]:
                     },
                     "model": {
                         "type": "string",
-                        "description": "Model to use (default: flux-pro-1.1)",
+                        "description": "Model to use (default: flux-pro-1.1). Costs: pro=$0.04, pro-1.1=$0.04, ultra=$0.06",
                         "enum": [
-                            "flux-pro",
                             "flux-dev",
+                            "flux-pro",
                             "flux-pro-1.1",
                             "flux-pro-1.1-ultra",
                             "flux-2-pro",
-                            "flux-2-dev",
+                            "flux-2-flex",
                         ],
                         "default": "flux-pro-1.1",
                     },
@@ -134,13 +143,13 @@ async def list_tools() -> list[Tool]:
                     "width": {
                         "type": "integer",
                         "description": (
-                            "Width in pixels (multiple of 32, 256-1440). Overrides aspect_ratio."
+                            "Width in pixels (multiple of 16, max 2048). Overrides aspect_ratio."
                         ),
                     },
                     "height": {
                         "type": "integer",
                         "description": (
-                            "Height in pixels (multiple of 32, 256-1440). Overrides aspect_ratio."
+                            "Height in pixels (multiple of 16, max 2048). Overrides aspect_ratio."
                         ),
                     },
                     "seed": {
@@ -154,8 +163,48 @@ async def list_tools() -> list[Tool]:
                         "maximum": 6,
                         "default": 2,
                     },
+                    "prompt_upsampling": {
+                        "type": "boolean",
+                        "description": "Enhance prompt for richer output (recommended for logos)",
+                        "default": False,
+                    },
+                    "output_format": {
+                        "type": "string",
+                        "description": "Output format (default: png)",
+                        "enum": ["png", "jpeg"],
+                        "default": "png",
+                    },
+                    "guidance": {
+                        "type": "number",
+                        "description": "Prompt adherence 1.5-10 (flux-2-flex only)",
+                        "minimum": 1.5,
+                        "maximum": 10,
+                    },
+                    "steps": {
+                        "type": "integer",
+                        "description": "Generation steps 1-50 (flux-2-flex only)",
+                        "minimum": 1,
+                        "maximum": 50,
+                    },
+                    "raw": {
+                        "type": "boolean",
+                        "description": "Raw mode for flux-pro-1.1-ultra",
+                        "default": False,
+                    },
                 },
                 "required": ["prompt"],
+            },
+        ),
+        Tool(
+            name="check_credits",
+            description=(
+                "Check your BFL API credit balance. Returns current credits available. "
+                "1 credit = $0.01 USD. Use this to verify your account is configured correctly."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
             },
         ),
         Tool(
@@ -218,22 +267,50 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             return await _generate_image(client, arguments)
         elif name == "edit_image":
             return await _edit_image(client, arguments)
+        elif name == "check_credits":
+            return await _check_credits(client)
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
     finally:
         await client.close()
 
 
+async def _check_credits(client: BFLClient) -> list[TextContent]:
+    """Check BFL API credit balance."""
+    try:
+        result = await client.get_credits()
+        credits = result.get("credits", 0)
+        usd_value = credits * 0.01
+
+        return [
+            TextContent(
+                type="text",
+                text=(
+                    f"**BFL API Credit Balance**\n\n"
+                    f"Credits: {credits:.2f}\n"
+                    f"Value: ${usd_value:.2f} USD\n\n"
+                    f"Pricing reference:\n"
+                    f"- flux-pro-1.1: 4 credits ($0.04)\n"
+                    f"- flux-pro-1.1-ultra: 6 credits ($0.06)\n"
+                    f"- kontext-pro: 4 credits ($0.04)\n"
+                    f"- kontext-max: 8 credits ($0.08)"
+                ),
+            )
+        ]
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error checking credits: {e!s}")]
+
+
 async def _generate_image(client: BFLClient, args: dict[str, Any]) -> list[TextContent]:
     """Handle generate_image tool."""
     # Map model name to endpoint
     model_map = {
-        "flux-pro": "v1/flux-pro",
         "flux-dev": "v1/flux-dev",
+        "flux-pro": "v1/flux-pro",
         "flux-pro-1.1": "v1/flux-pro-1.1",
         "flux-pro-1.1-ultra": "v1/flux-pro-1.1-ultra",
         "flux-2-pro": "v1/flux-2-pro",
-        "flux-2-dev": "v1/flux-2-dev",
+        "flux-2-flex": "v1/flux-2-flex",
     }
 
     model = args.get("model", "flux-pro-1.1")
@@ -254,6 +331,19 @@ async def _generate_image(client: BFLClient, args: dict[str, Any]) -> list[TextC
         payload["seed"] = args["seed"]
     if "safety_tolerance" in args:
         payload["safety_tolerance"] = args["safety_tolerance"]
+    if "prompt_upsampling" in args:
+        payload["prompt_upsampling"] = args["prompt_upsampling"]
+    if "output_format" in args:
+        payload["output_format"] = args["output_format"]
+
+    # Model-specific params
+    if model == "flux-2-flex":
+        if "guidance" in args:
+            payload["guidance"] = args["guidance"]
+        if "steps" in args:
+            payload["steps"] = args["steps"]
+    if model == "flux-pro-1.1-ultra" and args.get("raw"):
+        payload["raw"] = True
 
     try:
         # Submit and wait
