@@ -98,6 +98,15 @@ class BFLClient:
             response.raise_for_status()
             return response.json()
 
+    async def list_finetunes(self) -> dict[str, Any]:
+        """List all finetuned models for this account."""
+        response = await self.client.get(
+            "/v1/my_finetunes",
+            headers={"x-key": self.api_key},
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def close(self):
         await self.client.aclose()
 
@@ -149,6 +158,7 @@ async def list_tools() -> list[Tool]:
                             "flux-pro-1.1-ultra",
                             "flux-2-pro",
                             "flux-2-flex",
+                            "flux-2-max",
                         ],
                         "default": "flux-pro-1.1",
                     },
@@ -299,6 +309,188 @@ async def list_tools() -> list[Tool]:
                 "required": ["url", "path"],
             },
         ),
+        Tool(
+            name="expand_image",
+            description=(
+                "Expand an image by adding pixels to any side (outpainting). "
+                "Specify pixels to add to top, bottom, left, and/or right. "
+                "The AI will generate content that seamlessly extends the image."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "image": {
+                        "type": "string",
+                        "description": (
+                            "Image to expand: local file path, URL, or base64-encoded data"
+                        ),
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Optional text description to guide the expansion",
+                    },
+                    "top": {
+                        "type": "integer",
+                        "description": "Pixels to add to the top (0-2048)",
+                        "minimum": 0,
+                        "maximum": 2048,
+                        "default": 0,
+                    },
+                    "bottom": {
+                        "type": "integer",
+                        "description": "Pixels to add to the bottom (0-2048)",
+                        "minimum": 0,
+                        "maximum": 2048,
+                        "default": 0,
+                    },
+                    "left": {
+                        "type": "integer",
+                        "description": "Pixels to add to the left (0-2048)",
+                        "minimum": 0,
+                        "maximum": 2048,
+                        "default": 0,
+                    },
+                    "right": {
+                        "type": "integer",
+                        "description": "Pixels to add to the right (0-2048)",
+                        "minimum": 0,
+                        "maximum": 2048,
+                        "default": 0,
+                    },
+                    "seed": {
+                        "type": "integer",
+                        "description": "Seed for reproducibility (optional)",
+                    },
+                    "safety_tolerance": {
+                        "type": "integer",
+                        "description": "Safety filter (0=strict, 6=permissive, default: 2)",
+                        "minimum": 0,
+                        "maximum": 6,
+                        "default": 2,
+                    },
+                    "output_format": {
+                        "type": "string",
+                        "description": "Output format (default: png)",
+                        "enum": ["png", "jpeg"],
+                        "default": "png",
+                    },
+                },
+                "required": ["image"],
+            },
+        ),
+        Tool(
+            name="condition_generate",
+            description=(
+                "Generate an image guided by structural conditions from a reference image. "
+                "Use 'canny' mode to preserve edges/outlines, or 'depth' mode to preserve "
+                "spatial depth/composition. Great for style transfer while keeping structure."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "prompt": {
+                        "type": "string",
+                        "description": "Text description of the image to generate",
+                    },
+                    "control_image": {
+                        "type": "string",
+                        "description": (
+                            "Reference image for structural guidance: "
+                            "local file path, URL, or base64-encoded data"
+                        ),
+                    },
+                    "mode": {
+                        "type": "string",
+                        "description": (
+                            "Conditioning mode: 'canny' (edge detection) or 'depth' (depth map)"
+                        ),
+                        "enum": ["canny", "depth"],
+                        "default": "depth",
+                    },
+                    "aspect_ratio": {
+                        "type": "string",
+                        "description": "Aspect ratio (default: 1:1)",
+                        "enum": ["1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "9:21"],
+                        "default": "1:1",
+                    },
+                    "seed": {
+                        "type": "integer",
+                        "description": "Seed for reproducibility (optional)",
+                    },
+                    "safety_tolerance": {
+                        "type": "integer",
+                        "description": "Safety filter (0=strict, 6=permissive, default: 2)",
+                        "minimum": 0,
+                        "maximum": 6,
+                        "default": 2,
+                    },
+                    "output_format": {
+                        "type": "string",
+                        "description": "Output format (default: png)",
+                        "enum": ["png", "jpeg"],
+                        "default": "png",
+                    },
+                },
+                "required": ["prompt", "control_image"],
+            },
+        ),
+        Tool(
+            name="create_variation",
+            description=(
+                "Create variations of an existing image using Redux. "
+                "Generates images that maintain the essence of the original "
+                "while applying optional text-guided modifications."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "image": {
+                        "type": "string",
+                        "description": "Source image: local file path, URL, or base64-encoded data",
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Optional text guidance for the variation",
+                    },
+                    "aspect_ratio": {
+                        "type": "string",
+                        "description": "Aspect ratio (default: 1:1)",
+                        "enum": ["1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "9:21"],
+                        "default": "1:1",
+                    },
+                    "seed": {
+                        "type": "integer",
+                        "description": "Seed for reproducibility (optional)",
+                    },
+                    "safety_tolerance": {
+                        "type": "integer",
+                        "description": "Safety filter (0=strict, 6=permissive, default: 2)",
+                        "minimum": 0,
+                        "maximum": 6,
+                        "default": 2,
+                    },
+                    "output_format": {
+                        "type": "string",
+                        "description": "Output format (default: png)",
+                        "enum": ["png", "jpeg"],
+                        "default": "png",
+                    },
+                },
+                "required": ["image"],
+            },
+        ),
+        Tool(
+            name="list_finetunes",
+            description=(
+                "List all your finetuned models. Shows model names, status, "
+                "and identifiers that can be used with finetuned endpoints."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
     ]
 
 
@@ -318,6 +510,14 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             return await _edit_image(client, arguments)
         elif name == "check_credits":
             return await _check_credits(client)
+        elif name == "expand_image":
+            return await _expand_image(client, arguments)
+        elif name == "condition_generate":
+            return await _condition_generate(client, arguments)
+        elif name == "create_variation":
+            return await _create_variation(client, arguments)
+        elif name == "list_finetunes":
+            return await _list_finetunes(client)
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
     finally:
@@ -411,6 +611,7 @@ async def _generate_image(client: BFLClient, args: dict[str, Any]) -> list[TextC
         "flux-pro-1.1-ultra": "v1/flux-pro-1.1-ultra",
         "flux-2-pro": "v1/flux-2-pro",
         "flux-2-flex": "v1/flux-2-flex",
+        "flux-2-max": "v1/flux-2-max",
     }
 
     model = args.get("model", "flux-pro-1.1")
@@ -555,6 +756,251 @@ async def _edit_image(client: BFLClient, args: dict[str, Any]) -> list[TextConte
 
     except Exception as e:
         return [TextContent(type="text", text=f"Error: {e!s}")]
+
+
+async def _expand_image(client: BFLClient, args: dict[str, Any]) -> list[TextContent]:
+    """Handle expand_image tool (outpainting)."""
+    # Handle image input
+    image_input = args["image"]
+    if _is_local_file(image_input):
+        try:
+            image_input = _encode_image_to_base64(image_input)
+        except FileNotFoundError as e:
+            return [TextContent(type="text", text=f"Error: {e!s}")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error reading image file: {e!s}")]
+
+    # Build payload
+    payload: dict[str, Any] = {"image": image_input}
+
+    # Add expansion directions
+    for direction in ["top", "bottom", "left", "right"]:
+        if direction in args and args[direction] > 0:
+            payload[direction] = args[direction]
+
+    # Check at least one direction specified
+    if not any(d in payload for d in ["top", "bottom", "left", "right"]):
+        return [
+            TextContent(
+                type="text",
+                text="Error: At least one direction (top, bottom, left, right) must be > 0",
+            )
+        ]
+
+    # Optional params
+    if "prompt" in args:
+        payload["prompt"] = args["prompt"]
+    if "seed" in args:
+        payload["seed"] = args["seed"]
+    if "safety_tolerance" in args:
+        payload["safety_tolerance"] = args["safety_tolerance"]
+    if "output_format" in args:
+        payload["output_format"] = args["output_format"]
+
+    try:
+        submission = await client.submit("v1/flux-pro-1.0-expand", payload)
+        task_id = submission["id"]
+        polling_url = submission.get("polling_url")
+
+        result = await client.wait_for_completion(task_id, polling_url)
+
+        image_url = _extract_image_url(result)
+        cost = result.get("cost")
+
+        # Build expansion summary
+        expansions = []
+        for d in ["top", "bottom", "left", "right"]:
+            if d in args and args[d] > 0:
+                expansions.append(f"{d}: {args[d]}px")
+        expansion_summary = ", ".join(expansions)
+
+        cost_info = ""
+        if cost is not None:
+            usd = cost * 0.01
+            cost_info = f"**Credits used:** {cost} (${usd:.2f})\n"
+
+        return [
+            TextContent(
+                type="text",
+                text=(
+                    f"Image expanded successfully!\n\n"
+                    f"**Expansion:** {expansion_summary}\n"
+                    f"{cost_info}"
+                    f"**Result URL:** {image_url}\n\n"
+                    f"Note: URL is valid for 10 minutes. Download or use immediately."
+                ),
+            )
+        ]
+
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error: {e!s}")]
+
+
+async def _condition_generate(client: BFLClient, args: dict[str, Any]) -> list[TextContent]:
+    """Handle condition_generate tool (Canny/Depth conditioning)."""
+    mode = args.get("mode", "depth")
+    endpoint_map = {
+        "canny": "v1/flux-canny-pro",
+        "depth": "v1/flux-depth-pro",
+    }
+    endpoint = endpoint_map.get(mode, "v1/flux-depth-pro")
+
+    # Handle control image input
+    control_image = args["control_image"]
+    if _is_local_file(control_image):
+        try:
+            control_image = _encode_image_to_base64(control_image)
+        except FileNotFoundError as e:
+            return [TextContent(type="text", text=f"Error: {e!s}")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error reading image file: {e!s}")]
+
+    # Build payload
+    payload: dict[str, Any] = {
+        "prompt": args["prompt"],
+        "control_image": control_image,
+    }
+
+    # Optional params
+    if "aspect_ratio" in args:
+        payload["aspect_ratio"] = args["aspect_ratio"]
+    if "seed" in args:
+        payload["seed"] = args["seed"]
+    if "safety_tolerance" in args:
+        payload["safety_tolerance"] = args["safety_tolerance"]
+    if "output_format" in args:
+        payload["output_format"] = args["output_format"]
+
+    try:
+        submission = await client.submit(endpoint, payload)
+        task_id = submission["id"]
+        polling_url = submission.get("polling_url")
+
+        result = await client.wait_for_completion(task_id, polling_url)
+
+        image_url = _extract_image_url(result)
+        cost = result.get("cost")
+
+        prompt_display = args["prompt"][:100]
+        prompt_suffix = "..." if len(args["prompt"]) > 100 else ""
+
+        cost_info = ""
+        if cost is not None:
+            usd = cost * 0.01
+            cost_info = f"**Credits used:** {cost} (${usd:.2f})\n"
+
+        return [
+            TextContent(
+                type="text",
+                text=(
+                    f"Conditioned image generated successfully!\n\n"
+                    f"**Mode:** {mode}\n"
+                    f"**Prompt:** {prompt_display}{prompt_suffix}\n"
+                    f"{cost_info}"
+                    f"**Result URL:** {image_url}\n\n"
+                    f"Note: URL is valid for 10 minutes. Download or use immediately."
+                ),
+            )
+        ]
+
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error: {e!s}")]
+
+
+async def _create_variation(client: BFLClient, args: dict[str, Any]) -> list[TextContent]:
+    """Handle create_variation tool (Redux)."""
+    # Handle image input
+    image_input = args["image"]
+    if _is_local_file(image_input):
+        try:
+            image_input = _encode_image_to_base64(image_input)
+        except FileNotFoundError as e:
+            return [TextContent(type="text", text=f"Error: {e!s}")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error reading image file: {e!s}")]
+
+    # Build payload
+    payload: dict[str, Any] = {"image": image_input}
+
+    # Optional params
+    if "prompt" in args:
+        payload["prompt"] = args["prompt"]
+    if "aspect_ratio" in args:
+        payload["aspect_ratio"] = args["aspect_ratio"]
+    if "seed" in args:
+        payload["seed"] = args["seed"]
+    if "safety_tolerance" in args:
+        payload["safety_tolerance"] = args["safety_tolerance"]
+    if "output_format" in args:
+        payload["output_format"] = args["output_format"]
+
+    try:
+        submission = await client.submit("v1/flux-redux-pro", payload)
+        task_id = submission["id"]
+        polling_url = submission.get("polling_url")
+
+        result = await client.wait_for_completion(task_id, polling_url)
+
+        image_url = _extract_image_url(result)
+        cost = result.get("cost")
+
+        prompt_info = ""
+        if "prompt" in args:
+            prompt_display = args["prompt"][:100]
+            prompt_suffix = "..." if len(args["prompt"]) > 100 else ""
+            prompt_info = f"**Guidance:** {prompt_display}{prompt_suffix}\n"
+
+        cost_info = ""
+        if cost is not None:
+            usd = cost * 0.01
+            cost_info = f"**Credits used:** {cost} (${usd:.2f})\n"
+
+        return [
+            TextContent(
+                type="text",
+                text=(
+                    f"Variation created successfully!\n\n"
+                    f"{prompt_info}"
+                    f"{cost_info}"
+                    f"**Result URL:** {image_url}\n\n"
+                    f"Note: URL is valid for 10 minutes. Download or use immediately."
+                ),
+            )
+        ]
+
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error: {e!s}")]
+
+
+async def _list_finetunes(client: BFLClient) -> list[TextContent]:
+    """Handle list_finetunes tool."""
+    try:
+        result = await client.list_finetunes()
+
+        finetunes = result.get("finetunes", [])
+        if not finetunes:
+            return [
+                TextContent(
+                    type="text",
+                    text=(
+                        "**No finetuned models found.**\n\n"
+                        "You haven't created any finetuned models yet."
+                    ),
+                )
+            ]
+
+        lines = ["**Your Finetuned Models**\n"]
+        for ft in finetunes:
+            name = ft.get("name", "Unknown")
+            status = ft.get("status", "Unknown")
+            model_id = ft.get("id", "N/A")
+            lines.append(f"- **{name}** (ID: `{model_id}`)")
+            lines.append(f"  Status: {status}")
+
+        return [TextContent(type="text", text="\n".join(lines))]
+
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error listing finetunes: {e!s}")]
 
 
 def _is_local_file(image_input: str) -> bool:

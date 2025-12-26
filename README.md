@@ -10,15 +10,22 @@ Minimal Python MCP server for [Black Forest Labs](https://blackforestlabs.ai/) F
 
 ## Features
 
-- **Four focused tools:**
+- **Eight comprehensive tools:**
   - `generate_image` - Text-to-image with model selection
   - `edit_image` - Image editing with natural language
+  - `expand_image` - Directional outpainting (add pixels to any side)
+  - `condition_generate` - Structural conditioning (Canny edge / Depth map)
+  - `create_variation` - Redux-based image variations
   - `save_image` - Download and save images before URLs expire
   - `check_credits` - Verify API key and credit balance
+  - `list_finetunes` - View your custom finetuned models
 
 - **All Flux models supported:**
-  - Generation: `flux-pro-1.1` (default), `flux-pro-1.1-ultra`, `flux-2-pro`, `flux-2-flex`, `flux-pro`, `flux-dev`
+  - Generation: `flux-pro-1.1` (default), `flux-pro-1.1-ultra`, `flux-2-pro`, `flux-2-flex`, `flux-2-max`, `flux-pro`, `flux-dev`
   - Editing: `kontext-pro`, `kontext-max`, `fill-pro`
+  - Structural: `canny-pro`, `depth-pro`
+  - Variations: `redux-pro`
+  - Expansion: `expand-pro`
 
 - **Full API parameter support:**
   - Aspect ratio or custom dimensions
@@ -126,6 +133,64 @@ Edit this image to add a rainbow in the sky
 | `seed` | For reproducibility | - |
 | `safety_tolerance` | 0-2 | 2 |
 
+### Expand Image
+
+Expand an image by adding pixels to any side (outpainting):
+
+```
+Expand the image by 256 pixels on the right side
+```
+
+**Parameters:**
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `image` | Image to expand: path, URL, or base64 (required) | - |
+| `prompt` | Optional guidance for the expansion | - |
+| `top` | Pixels to add to top (0-2048) | 0 |
+| `bottom` | Pixels to add to bottom (0-2048) | 0 |
+| `left` | Pixels to add to left (0-2048) | 0 |
+| `right` | Pixels to add to right (0-2048) | 0 |
+| `seed` | For reproducibility | - |
+| `safety_tolerance` | 0-6 | 2 |
+| `output_format` | `png` or `jpeg` | `png` |
+
+### Condition Generate
+
+Generate an image using structural guidance from a reference:
+
+```
+Generate an anime version using the depth structure from this photo
+```
+
+**Parameters:**
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `prompt` | Text description (required) | - |
+| `control_image` | Reference image for structure (required) | - |
+| `mode` | `canny` (edges) or `depth` (depth map) | `depth` |
+| `aspect_ratio` | Output aspect ratio | `1:1` |
+| `seed` | For reproducibility | - |
+| `safety_tolerance` | 0-6 | 2 |
+| `output_format` | `png` or `jpeg` | `png` |
+
+### Create Variation
+
+Create variations of an existing image:
+
+```
+Create a variation of this image with warmer colors
+```
+
+**Parameters:**
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `image` | Source image: path, URL, or base64 (required) | - |
+| `prompt` | Optional text guidance for the variation | - |
+| `aspect_ratio` | Output aspect ratio | `1:1` |
+| `seed` | For reproducibility | - |
+| `safety_tolerance` | 0-6 | 2 |
+| `output_format` | `png` or `jpeg` | `png` |
+
 ### Save Image
 
 Download and save a generated image before the URL expires (10 min):
@@ -140,6 +205,16 @@ Save that image to /path/to/logo.png
 | `url` | Image URL from generate/edit result (required) | - |
 | `path` | Destination file path (required) | - |
 
+### List Finetunes
+
+View your custom finetuned models:
+
+```
+Show my finetuned models
+```
+
+No parameters required.
+
 ## Pricing
 
 | Model | Credits | USD |
@@ -148,12 +223,17 @@ Save that image to /path/to/logo.png
 | flux-pro-1.1-ultra | 6 | $0.06 |
 | flux-2-pro | 5 | $0.05 |
 | flux-2-flex | 1-5 | $0.01-0.05 |
+| flux-2-max | 6 | $0.06 |
 | kontext-pro | 4 | $0.04 |
 | kontext-max | 8 | $0.08 |
+| canny-pro | 4 | $0.04 |
+| depth-pro | 4 | $0.04 |
+| redux-pro | 4 | $0.04 |
+| expand-pro | 4 | $0.04 |
 
 *1 credit = $0.01 USD*
 
-**Note:** Credits used are shown in generate/edit responses when available.
+**Note:** Credits used are shown in tool responses when available.
 
 ## Development
 
