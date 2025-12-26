@@ -10,9 +10,10 @@ Minimal Python MCP server for [Black Forest Labs](https://blackforestlabs.ai/) F
 
 ## Features
 
-- **Three focused tools:**
+- **Four focused tools:**
   - `generate_image` - Text-to-image with model selection
   - `edit_image` - Image editing with natural language
+  - `save_image` - Download and save images before URLs expire
   - `check_credits` - Verify API key and credit balance
 
 - **All Flux models supported:**
@@ -125,6 +126,20 @@ Edit this image to add a rainbow in the sky
 | `seed` | For reproducibility | - |
 | `safety_tolerance` | 0-2 | 2 |
 
+### Save Image
+
+Download and save a generated image before the URL expires (10 min):
+
+```
+Save that image to /path/to/logo.png
+```
+
+**Parameters:**
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `url` | Image URL from generate/edit result (required) | - |
+| `path` | Destination file path (required) | - |
+
 ## Pricing
 
 | Model | Credits | USD |
@@ -137,6 +152,8 @@ Edit this image to add a rainbow in the sky
 | kontext-max | 8 | $0.08 |
 
 *1 credit = $0.01 USD*
+
+**Note:** Credits used are shown in generate/edit responses when available.
 
 ## Development
 
