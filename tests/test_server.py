@@ -11,6 +11,7 @@ from bfl_flux_mcp.server import (
     _edit_image,
     _extract_image_url,
     _generate_image,
+    _save_image,
     call_tool,
     get_client,
     list_tools,
@@ -188,10 +189,10 @@ class TestListTools:
     """Tests for list_tools."""
 
     @pytest.mark.asyncio
-    async def test_returns_three_tools(self):
-        """Returns all three tools."""
+    async def test_returns_four_tools(self):
+        """Returns all four tools."""
         tools = await list_tools()
-        assert len(tools) == 3
+        assert len(tools) == 4
 
     @pytest.mark.asyncio
     async def test_tool_names(self):
@@ -201,6 +202,7 @@ class TestListTools:
         assert "generate_image" in names
         assert "edit_image" in names
         assert "check_credits" in names
+        assert "save_image" in names
 
     @pytest.mark.asyncio
     async def test_generate_image_schema(self):
@@ -705,3 +707,97 @@ class TestCallTool:
             await call_tool("generate_image", {"prompt": "test"})
 
             mock_client.close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_dispatches_save_image(self):
+        """Dispatches to save_image tool (no BFL client needed)."""
+        with patch("bfl_flux_mcp.server._save_image", new_callable=AsyncMock) as mock_save:
+            from mcp.types import TextContent
+
+            mock_save.return_value = [TextContent(type="text", text="Saved")]
+            args = {"url": "http://example.com/img.png", "path": "/tmp/img.png"}
+
+            result = await call_tool("save_image", args)
+
+            mock_save.assert_called_once_with(args)
+            assert result[0].text == "Saved"
+
+
+class TestSaveImage:
+    """Tests for save_image tool."""
+
+    @pytest.mark.asyncio
+    async def test_saves_image_successfully(self, tmp_path):
+        """Successfully downloads and saves an image."""
+
+        dest_path = tmp_path / "test.png"
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_response = MagicMock()
+            mock_response.content = b"fake image data"
+            mock_response.headers = {"content-type": "image/png"}
+            mock_response.raise_for_status = MagicMock()
+
+            mock_client = MagicMock()
+            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client_class.return_value = mock_client
+
+            args = {"url": "http://example.com/img.png", "path": str(dest_path)}
+            result = await _save_image(args)
+
+            assert "Image saved successfully" in result[0].text
+            assert str(dest_path) in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_parent_directory_must_exist(self):
+        """Returns error if parent directory doesn't exist."""
+        result = await _save_image(
+            {"url": "http://example.com/img.png", "path": "/nonexistent/directory/image.png"}
+        )
+
+        assert "Parent directory does not exist" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_handles_http_error(self, tmp_path):
+        """Handles HTTP errors gracefully."""
+        import httpx
+
+        dest_path = tmp_path / "test.png"
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.get = AsyncMock(
+                side_effect=httpx.HTTPStatusError("404", request=MagicMock(), response=MagicMock())
+            )
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client_class.return_value = mock_client
+
+            args = {"url": "http://example.com/img.png", "path": str(dest_path)}
+            result = await _save_image(args)
+
+            assert "Error downloading image" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_validates_content_type(self, tmp_path):
+        """Returns error if URL is not an image."""
+        dest_path = tmp_path / "test.png"
+
+        with patch("httpx.AsyncClient") as mock_client_class:
+            mock_response = MagicMock()
+            mock_response.content = b"not an image"
+            mock_response.headers = {"content-type": "text/html"}
+            mock_response.raise_for_status = MagicMock()
+
+            mock_client = MagicMock()
+            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client_class.return_value = mock_client
+
+            args = {"url": "http://example.com/page.html", "path": str(dest_path)}
+            result = await _save_image(args)
+
+            assert "does not point to an image" in result[0].text

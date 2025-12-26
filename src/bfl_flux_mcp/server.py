@@ -12,6 +12,7 @@ API Reference: https://docs.bfl.ml
 import asyncio
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -266,12 +267,41 @@ async def list_tools() -> list[Tool]:
                 "required": ["prompt", "image"],
             },
         ),
+        Tool(
+            name="save_image",
+            description=(
+                "Download and save a generated image to a local file. "
+                "Use this to save images before URLs expire (10 min). "
+                "Supports PNG and JPEG formats."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "URL of the image to download (from generate/edit result)",
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": (
+                            "Destination file path (e.g., /path/to/image.png). "
+                            "Parent directory must exist."
+                        ),
+                    },
+                },
+                "required": ["url", "path"],
+            },
+        ),
     ]
 
 
 @server.call_tool()
 async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
     """Execute a tool."""
+    # save_image doesn't need BFL client
+    if name == "save_image":
+        return await _save_image(arguments)
+
     client = get_client()
 
     try:
@@ -311,6 +341,57 @@ async def _check_credits(client: BFLClient) -> list[TextContent]:
         ]
     except Exception as e:
         return [TextContent(type="text", text=f"Error checking credits: {e!s}")]
+
+
+async def _save_image(args: dict[str, Any]) -> list[TextContent]:
+    """Download and save an image to a local file."""
+    url = args["url"]
+    path = Path(args["path"])
+
+    try:
+        # Validate path
+        if not path.parent.exists():
+            return [
+                TextContent(
+                    type="text",
+                    text=f"Error: Parent directory does not exist: {path.parent}",
+                )
+            ]
+
+        # Download image
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+
+            # Get content type for validation
+            content_type = response.headers.get("content-type", "")
+            if not content_type.startswith("image/"):
+                return [
+                    TextContent(
+                        type="text",
+                        text=(
+                            f"Error: URL does not point to an image (content-type: {content_type})"
+                        ),
+                    )
+                ]
+
+            # Write to file
+            path.write_bytes(response.content)
+
+        file_size = path.stat().st_size
+        size_kb = file_size / 1024
+
+        return [
+            TextContent(
+                type="text",
+                text=(f"Image saved successfully!\n\n**Path:** {path}\n**Size:** {size_kb:.1f} KB"),
+            )
+        ]
+
+    except httpx.HTTPStatusError as e:
+        return [TextContent(type="text", text=f"Error downloading image: {e!s}")]
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error saving image: {e!s}")]
 
 
 async def _generate_image(client: BFLClient, args: dict[str, Any]) -> list[TextContent]:
