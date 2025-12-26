@@ -10,10 +10,11 @@ Minimal Python MCP server for [Black Forest Labs](https://blackforestlabs.ai/) F
 
 ## Features
 
-- **Six comprehensive tools:**
+- **Seven comprehensive tools:**
   - `generate_image` - Text-to-image with model selection
   - `edit_image` - Image editing with natural language
   - `expand_image` - Directional outpainting (add pixels to any side)
+  - `create_variation` - Create variations of an image using Redux (image_prompt)
   - `save_image` - Download and save images before URLs expire
   - `check_credits` - Verify API key and credit balance
   - `list_finetunes` - View your custom finetuned models
@@ -173,6 +174,25 @@ Show my finetuned models
 ```
 
 No parameters required.
+
+### Create Variation
+
+Create variations of an existing image that maintain its essence while applying optional text guidance:
+
+```
+Create a variation of this image with a warmer color palette
+```
+
+**Parameters:**
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `image` | Source image: path, URL, or base64 (required) | - |
+| `prompt` | Optional text guidance for the variation | - |
+| `model` | `flux-pro-1.1`, `flux-pro-1.1-ultra`, `flux-dev` | `flux-pro-1.1` |
+| `aspect_ratio` | Output aspect ratio | `1:1` |
+| `seed` | For reproducibility | - |
+| `safety_tolerance` | 0-6 | 2 |
+| `output_format` | `png` or `jpeg` | `png` |
 
 ## Pricing
 

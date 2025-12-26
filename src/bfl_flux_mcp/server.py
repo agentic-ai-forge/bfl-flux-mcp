@@ -2,9 +2,14 @@
 """
 BFL Flux MCP Server - Minimal Python implementation
 
-Exposes two tools:
+Exposes seven tools:
 - generate_image: Text-to-image generation with model selection
 - edit_image: Image editing using Kontext models
+- expand_image: Directional outpainting
+- create_variation: Create variations using Redux (image_prompt)
+- save_image: Download and save images before URLs expire
+- check_credits: Verify API key and credit balance
+- list_finetunes: View custom finetuned models
 
 API Reference: https://docs.bfl.ml
 """
@@ -390,6 +395,59 @@ async def list_tools() -> list[Tool]:
                 "required": [],
             },
         ),
+        Tool(
+            name="create_variation",
+            description=(
+                "Create variations of an existing image using Redux. "
+                "Generates images that maintain the essence of the original "
+                "while applying optional text-guided modifications."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "image": {
+                        "type": "string",
+                        "description": (
+                            "Source image: local file path, URL, or base64-encoded data"
+                        ),
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Optional text guidance for the variation",
+                    },
+                    "model": {
+                        "type": "string",
+                        "description": "Model to use (default: flux-pro-1.1)",
+                        "enum": ["flux-pro-1.1", "flux-pro-1.1-ultra", "flux-dev"],
+                        "default": "flux-pro-1.1",
+                    },
+                    "aspect_ratio": {
+                        "type": "string",
+                        "description": "Aspect ratio (default: 1:1)",
+                        "enum": ["1:1", "16:9", "9:16", "4:3", "3:4", "21:9", "9:21"],
+                        "default": "1:1",
+                    },
+                    "seed": {
+                        "type": "integer",
+                        "description": "Seed for reproducibility (optional)",
+                    },
+                    "safety_tolerance": {
+                        "type": "integer",
+                        "description": "Safety filter (0=strict, 6=permissive, default: 2)",
+                        "minimum": 0,
+                        "maximum": 6,
+                        "default": 2,
+                    },
+                    "output_format": {
+                        "type": "string",
+                        "description": "Output format (default: png)",
+                        "enum": ["png", "jpeg"],
+                        "default": "png",
+                    },
+                },
+                "required": ["image"],
+            },
+        ),
     ]
 
 
@@ -413,6 +471,8 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             return await _expand_image(client, arguments)
         elif name == "list_finetunes":
             return await _list_finetunes(client)
+        elif name == "create_variation":
+            return await _create_variation(client, arguments)
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
     finally:
@@ -760,6 +820,90 @@ async def _list_finetunes(client: BFLClient) -> list[TextContent]:
 
     except Exception as e:
         return [TextContent(type="text", text=f"Error listing finetunes: {e!s}")]
+
+
+async def _create_variation(client: BFLClient, args: dict[str, Any]) -> list[TextContent]:
+    """Handle create_variation tool using image_prompt for Redux-style variations."""
+    # Map model name to endpoint
+    model_map = {
+        "flux-dev": "v1/flux-dev",
+        "flux-pro-1.1": "v1/flux-pro-1.1",
+        "flux-pro-1.1-ultra": "v1/flux-pro-1.1-ultra",
+    }
+
+    model = args.get("model", "flux-pro-1.1")
+    endpoint = model_map.get(model, "v1/flux-pro-1.1")
+
+    # Handle image input: local file path, URL, or base64
+    image_input = args["image"]
+    if _is_local_file(image_input):
+        try:
+            image_input = _encode_image_to_base64(image_input)
+        except FileNotFoundError as e:
+            return [TextContent(type="text", text=f"Error: {e!s}")]
+        except Exception as e:
+            return [TextContent(type="text", text=f"Error reading image file: {e!s}")]
+
+    # Build payload - use image_prompt for variation
+    payload: dict[str, Any] = {
+        "image_prompt": image_input,
+    }
+
+    # Add text prompt if provided (for guided variations)
+    if "prompt" in args and args["prompt"]:
+        payload["prompt"] = args["prompt"]
+
+    # Handle aspect ratio
+    if "aspect_ratio" in args:
+        payload["aspect_ratio"] = args["aspect_ratio"]
+
+    # Optional params
+    if "seed" in args:
+        payload["seed"] = args["seed"]
+    if "safety_tolerance" in args:
+        payload["safety_tolerance"] = args["safety_tolerance"]
+    if "output_format" in args:
+        payload["output_format"] = args["output_format"]
+
+    try:
+        # Submit and wait
+        submission = await client.submit(endpoint, payload)
+        task_id = submission["id"]
+        polling_url = submission.get("polling_url")
+
+        result = await client.wait_for_completion(task_id, polling_url)
+
+        # Extract image URL and cost
+        image_url = _extract_image_url(result)
+        cost = result.get("cost")
+
+        prompt_info = ""
+        if "prompt" in args and args["prompt"]:
+            prompt_display = args["prompt"][:80]
+            prompt_suffix = "..." if len(args["prompt"]) > 80 else ""
+            prompt_info = f"**Guidance:** {prompt_display}{prompt_suffix}\n"
+
+        cost_info = ""
+        if cost is not None:
+            usd = cost * 0.01
+            cost_info = f"**Credits used:** {cost} (${usd:.2f})\n"
+
+        return [
+            TextContent(
+                type="text",
+                text=(
+                    f"Variation created successfully!\n\n"
+                    f"**Model:** {model}\n"
+                    f"{prompt_info}"
+                    f"{cost_info}"
+                    f"**Result URL:** {image_url}\n\n"
+                    f"Note: URL is valid for 10 minutes. Download or use immediately."
+                ),
+            )
+        ]
+
+    except Exception as e:
+        return [TextContent(type="text", text=f"Error: {e!s}")]
 
 
 def _is_local_file(image_input: str) -> bool:
