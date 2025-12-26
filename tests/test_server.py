@@ -8,8 +8,10 @@ import pytest
 from bfl_flux_mcp.server import (
     BFLClient,
     _check_credits,
+    _edit_image,
     _extract_image_url,
     _generate_image,
+    call_tool,
     get_client,
     list_tools,
 )
@@ -29,6 +31,109 @@ class TestBFLClient:
         headers = client.client.headers
         assert headers["x-key"] == "test-key"
         assert headers["Content-Type"] == "application/json"
+
+    @pytest.mark.asyncio
+    async def test_submit_posts_to_endpoint(self):
+        """Submit posts to the correct endpoint."""
+        client = BFLClient("test-key")
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"id": "task-123"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client.client, "post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+            result = await client.submit("v1/flux-pro-1.1", {"prompt": "test"})
+
+        mock_post.assert_called_once_with("/v1/flux-pro-1.1", json={"prompt": "test"})
+        assert result == {"id": "task-123"}
+
+    @pytest.mark.asyncio
+    async def test_get_result_without_polling_url(self):
+        """get_result uses default endpoint when no polling_url."""
+        client = BFLClient("test-key")
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"status": "Ready"}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client.client, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+            result = await client.get_result("task-123")
+
+        mock_get.assert_called_once()
+        call_args = mock_get.call_args
+        assert call_args[1]["params"] == {"id": "task-123"}
+        assert result == {"status": "Ready"}
+
+    @pytest.mark.asyncio
+    async def test_get_result_with_polling_url(self):
+        """get_result uses polling_url when provided."""
+        client = BFLClient("test-key")
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"status": "Ready"}
+        mock_response.raise_for_status = MagicMock()
+
+        polling_url = "https://api.eu2.bfl.ai/v1/get_result?id=task-123"
+        with patch.object(client.client, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+            result = await client.get_result("task-123", polling_url)
+
+        mock_get.assert_called_once_with(polling_url, headers={"x-key": "test-key"})
+        assert result == {"status": "Ready"}
+
+    @pytest.mark.asyncio
+    async def test_wait_for_completion_returns_on_ready(self):
+        """wait_for_completion returns when status is Ready."""
+        client = BFLClient("test-key")
+
+        with patch.object(client, "get_result", new_callable=AsyncMock) as mock_get_result:
+            mock_get_result.return_value = {"status": "Ready", "result": {"sample": "url"}}
+            result = await client.wait_for_completion("task-123")
+
+        assert result["status"] == "Ready"
+
+    @pytest.mark.asyncio
+    async def test_wait_for_completion_raises_on_error(self):
+        """wait_for_completion raises on error status."""
+        client = BFLClient("test-key")
+
+        with patch.object(client, "get_result", new_callable=AsyncMock) as mock_get_result:
+            mock_get_result.return_value = {"status": "Error"}
+            with pytest.raises(Exception, match="Task failed: Error"):
+                await client.wait_for_completion("task-123")
+
+    @pytest.mark.asyncio
+    async def test_wait_for_completion_raises_on_content_moderated(self):
+        """wait_for_completion raises on Content Moderated status."""
+        client = BFLClient("test-key")
+
+        with patch.object(client, "get_result", new_callable=AsyncMock) as mock_get_result:
+            mock_get_result.return_value = {"status": "Content Moderated"}
+            with pytest.raises(Exception, match="Task failed: Content Moderated"):
+                await client.wait_for_completion("task-123")
+
+    @pytest.mark.asyncio
+    async def test_get_credits(self):
+        """get_credits returns credit balance."""
+        client = BFLClient("test-key")
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"credits": 100.0}
+        mock_response.raise_for_status = MagicMock()
+
+        with patch.object(client.client, "get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+            result = await client.get_credits()
+
+        assert result == {"credits": 100.0}
+
+    @pytest.mark.asyncio
+    async def test_close(self):
+        """close closes the httpx client."""
+        client = BFLClient("test-key")
+
+        with patch.object(client.client, "aclose", new_callable=AsyncMock) as mock_close:
+            await client.close()
+
+        mock_close.assert_called_once()
 
 
 class TestGetClient:
@@ -254,3 +359,309 @@ class TestGenerateImage:
         result = await _generate_image(mock_client, {"prompt": "test"})
 
         assert "Error" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_width_height_override_aspect_ratio(self):
+        """width/height override aspect_ratio."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
+        )
+
+        await _generate_image(
+            mock_client,
+            {"prompt": "test", "width": 1024, "height": 768, "aspect_ratio": "1:1"},
+        )
+
+        call_args = mock_client.submit.call_args
+        payload = call_args[0][1]
+        assert payload["width"] == 1024
+        assert payload["height"] == 768
+        assert "aspect_ratio" not in payload
+
+    @pytest.mark.asyncio
+    async def test_aspect_ratio_passed(self):
+        """aspect_ratio is passed when no width/height."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
+        )
+
+        await _generate_image(mock_client, {"prompt": "test", "aspect_ratio": "16:9"})
+
+        call_args = mock_client.submit.call_args
+        assert call_args[0][1]["aspect_ratio"] == "16:9"
+
+    @pytest.mark.asyncio
+    async def test_optional_params_passed(self):
+        """Optional params are passed to API."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
+        )
+
+        await _generate_image(
+            mock_client,
+            {
+                "prompt": "test",
+                "seed": 42,
+                "safety_tolerance": 4,
+                "output_format": "jpeg",
+            },
+        )
+
+        call_args = mock_client.submit.call_args
+        payload = call_args[0][1]
+        assert payload["seed"] == 42
+        assert payload["safety_tolerance"] == 4
+        assert payload["output_format"] == "jpeg"
+
+    @pytest.mark.asyncio
+    async def test_ultra_raw_mode(self):
+        """raw mode for flux-pro-1.1-ultra."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
+        )
+
+        await _generate_image(
+            mock_client, {"prompt": "test", "model": "flux-pro-1.1-ultra", "raw": True}
+        )
+
+        call_args = mock_client.submit.call_args
+        assert call_args[0][0] == "v1/flux-pro-1.1-ultra"
+        assert call_args[0][1]["raw"] is True
+
+    @pytest.mark.asyncio
+    async def test_long_prompt_truncated_in_output(self):
+        """Long prompts are truncated in output message."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
+        )
+
+        long_prompt = "A" * 150
+        result = await _generate_image(mock_client, {"prompt": long_prompt})
+
+        assert "..." in result[0].text
+        assert "A" * 100 in result[0].text
+
+
+class TestEditImage:
+    """Tests for edit_image tool."""
+
+    @pytest.mark.asyncio
+    async def test_basic_edit(self):
+        """Basic image editing works."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={
+                "id": "task-123",
+                "polling_url": "https://api.eu2.bfl.ai/v1/get_result?id=task-123",
+            }
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/edited.png"}}
+        )
+
+        result = await _edit_image(mock_client, {"prompt": "Add a hat", "image": "base64data"})
+
+        assert len(result) == 1
+        assert "Image edited successfully" in result[0].text
+        assert "https://example.com/edited.png" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_uses_correct_endpoint_for_model(self):
+        """Uses correct API endpoint for each edit model."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
+        )
+
+        await _edit_image(mock_client, {"prompt": "test", "image": "data", "model": "kontext-max"})
+
+        call_args = mock_client.submit.call_args
+        assert call_args[0][0] == "v1/flux-kontext-max"
+
+    @pytest.mark.asyncio
+    async def test_fill_pro_endpoint(self):
+        """fill-pro uses correct endpoint."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
+        )
+
+        await _edit_image(mock_client, {"prompt": "test", "image": "data", "model": "fill-pro"})
+
+        call_args = mock_client.submit.call_args
+        assert call_args[0][0] == "v1/flux-fill-pro"
+
+    @pytest.mark.asyncio
+    async def test_optional_params_passed(self):
+        """Optional params are passed to edit API."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
+        )
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
+        )
+
+        await _edit_image(
+            mock_client,
+            {
+                "prompt": "test",
+                "image": "data",
+                "aspect_ratio": "16:9",
+                "seed": 42,
+                "safety_tolerance": 1,
+            },
+        )
+
+        call_args = mock_client.submit.call_args
+        payload = call_args[0][1]
+        assert payload["aspect_ratio"] == "16:9"
+        assert payload["seed"] == 42
+        assert payload["safety_tolerance"] == 1
+
+    @pytest.mark.asyncio
+    async def test_handles_api_error(self):
+        """Handles API errors gracefully."""
+        mock_client = MagicMock()
+        mock_client.submit = AsyncMock(side_effect=Exception("API Error"))
+
+        result = await _edit_image(mock_client, {"prompt": "test", "image": "data"})
+
+        assert "Error" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_polling_url_passed(self):
+        """polling_url is passed to wait_for_completion."""
+        mock_client = MagicMock()
+        polling_url = "https://api.eu2.bfl.ai/v1/get_result?id=task-123"
+        mock_client.submit = AsyncMock(return_value={"id": "task-123", "polling_url": polling_url})
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
+        )
+
+        await _edit_image(mock_client, {"prompt": "test", "image": "data"})
+
+        mock_client.wait_for_completion.assert_called_once_with("task-123", polling_url)
+
+
+class TestCallTool:
+    """Tests for call_tool dispatcher."""
+
+    @pytest.mark.asyncio
+    async def test_dispatches_generate_image(self):
+        """Dispatches to generate_image tool."""
+        with patch("bfl_flux_mcp.server.get_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.submit = AsyncMock(
+                return_value={"id": "task-123", "polling_url": "https://api.bfl.ai"}
+            )
+            mock_client.wait_for_completion = AsyncMock(
+                return_value={
+                    "status": "Ready",
+                    "result": {"sample": "https://example.com/img.png"},
+                }
+            )
+            mock_client.close = AsyncMock()
+            mock_get_client.return_value = mock_client
+
+            result = await call_tool("generate_image", {"prompt": "test"})
+
+            assert "Image generated successfully" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_dispatches_edit_image(self):
+        """Dispatches to edit_image tool."""
+        with patch("bfl_flux_mcp.server.get_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.submit = AsyncMock(
+                return_value={"id": "task-123", "polling_url": "https://api.bfl.ai"}
+            )
+            mock_client.wait_for_completion = AsyncMock(
+                return_value={
+                    "status": "Ready",
+                    "result": {"sample": "https://example.com/img.png"},
+                }
+            )
+            mock_client.close = AsyncMock()
+            mock_get_client.return_value = mock_client
+
+            result = await call_tool("edit_image", {"prompt": "test", "image": "data"})
+
+            assert "Image edited successfully" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_dispatches_check_credits(self):
+        """Dispatches to check_credits tool."""
+        with patch("bfl_flux_mcp.server.get_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.get_credits = AsyncMock(return_value={"credits": 50.0})
+            mock_client.close = AsyncMock()
+            mock_get_client.return_value = mock_client
+
+            result = await call_tool("check_credits", {})
+
+            assert "Credits: 50.00" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_unknown_tool(self):
+        """Returns error for unknown tool."""
+        with patch("bfl_flux_mcp.server.get_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.close = AsyncMock()
+            mock_get_client.return_value = mock_client
+
+            result = await call_tool("unknown_tool", {})
+
+            assert "Unknown tool" in result[0].text
+
+    @pytest.mark.asyncio
+    async def test_closes_client_on_success(self):
+        """Client is closed after successful call."""
+        with patch("bfl_flux_mcp.server.get_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.get_credits = AsyncMock(return_value={"credits": 50.0})
+            mock_client.close = AsyncMock()
+            mock_get_client.return_value = mock_client
+
+            await call_tool("check_credits", {})
+
+            mock_client.close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_closes_client_on_error(self):
+        """Client is closed even when tool raises error."""
+        with patch("bfl_flux_mcp.server.get_client") as mock_get_client:
+            mock_client = MagicMock()
+            mock_client.submit = AsyncMock(side_effect=Exception("Error"))
+            mock_client.close = AsyncMock()
+            mock_get_client.return_value = mock_client
+
+            await call_tool("generate_image", {"prompt": "test"})
+
+            mock_client.close.assert_called_once()
