@@ -172,7 +172,10 @@ class TestGenerateImage:
         """Basic image generation works."""
         mock_client = MagicMock()
         mock_client.submit = AsyncMock(
-            return_value={"id": "task-123", "polling_url": "https://api.eu2.bfl.ai/v1/get_result?id=task-123"}
+            return_value={
+                "id": "task-123",
+                "polling_url": "https://api.eu2.bfl.ai/v1/get_result?id=task-123",
+            }
         )
         mock_client.wait_for_completion = AsyncMock(
             return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
@@ -189,7 +192,10 @@ class TestGenerateImage:
         """Uses correct API endpoint for each model."""
         mock_client = MagicMock()
         mock_client.submit = AsyncMock(
-            return_value={"id": "task-123", "polling_url": "https://api.eu2.bfl.ai/v1/get_result?id=task-123"}
+            return_value={
+                "id": "task-123",
+                "polling_url": "https://api.eu2.bfl.ai/v1/get_result?id=task-123",
+            }
         )
         mock_client.wait_for_completion = AsyncMock(
             return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
@@ -210,7 +216,10 @@ class TestGenerateImage:
         """prompt_upsampling is passed to API."""
         mock_client = MagicMock()
         mock_client.submit = AsyncMock(
-            return_value={"id": "task-123", "polling_url": "https://api.eu2.bfl.ai/v1/get_result?id=task-123"}
+            return_value={
+                "id": "task-123",
+                "polling_url": "https://api.eu2.bfl.ai/v1/get_result?id=task-123",
+            }
         )
         mock_client.wait_for_completion = AsyncMock(
             return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}

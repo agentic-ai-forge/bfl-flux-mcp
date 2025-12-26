@@ -106,7 +106,7 @@ def get_client() -> BFLClient:
     api_key = os.environ.get("BFL_API_KEY")
     if not api_key:
         raise ValueError(
-            "BFL_API_KEY environment variable is required. " "Get your key at https://api.bfl.ml"
+            "BFL_API_KEY environment variable is required. Get your key at https://api.bfl.ml"
         )
     return BFLClient(api_key)
 
@@ -132,7 +132,10 @@ async def list_tools() -> list[Tool]:
                     },
                     "model": {
                         "type": "string",
-                        "description": "Model to use (default: flux-pro-1.1). Costs: pro=$0.04, pro-1.1=$0.04, ultra=$0.06",
+                        "description": (
+                            "Model to use (default: flux-pro-1.1). "
+                            "Costs: pro=$0.04, pro-1.1=$0.04, ultra=$0.06"
+                        ),
                         "enum": [
                             "flux-dev",
                             "flux-pro",
@@ -365,13 +368,15 @@ async def _generate_image(client: BFLClient, args: dict[str, Any]) -> list[TextC
         # Extract image URL
         image_url = _extract_image_url(result)
 
+        prompt_display = args["prompt"][:100]
+        prompt_suffix = "..." if len(args["prompt"]) > 100 else ""
         return [
             TextContent(
                 type="text",
                 text=(
                     f"Image generated successfully!\n\n"
                     f"**Model:** {model}\n"
-                    f"**Prompt:** {args['prompt'][:100]}{'...' if len(args['prompt']) > 100 else ''}\n"
+                    f"**Prompt:** {prompt_display}{prompt_suffix}\n"
                     f"**Image URL:** {image_url}\n\n"
                     f"Note: URL is valid for 10 minutes. Download or use immediately."
                 ),
@@ -419,13 +424,15 @@ async def _edit_image(client: BFLClient, args: dict[str, Any]) -> list[TextConte
         # Extract image URL
         image_url = _extract_image_url(result)
 
+        prompt_display = args["prompt"][:100]
+        prompt_suffix = "..." if len(args["prompt"]) > 100 else ""
         return [
             TextContent(
                 type="text",
                 text=(
                     f"Image edited successfully!\n\n"
                     f"**Model:** {model}\n"
-                    f"**Edit instruction:** {args['prompt'][:100]}{'...' if len(args['prompt']) > 100 else ''}\n"
+                    f"**Edit instruction:** {prompt_display}{prompt_suffix}\n"
                     f"**Result URL:** {image_url}\n\n"
                     f"Note: URL is valid for 10 minutes. Download or use immediately."
                 ),
