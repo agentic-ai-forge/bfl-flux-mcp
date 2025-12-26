@@ -114,17 +114,25 @@ class TestBFLClient:
 
     @pytest.mark.asyncio
     async def test_get_credits(self):
-        """get_credits returns credit balance."""
+        """get_credits returns credit balance from api.bfl.ml."""
         client = BFLClient("test-key")
         mock_response = MagicMock()
         mock_response.json.return_value = {"credits": 100.0}
         mock_response.raise_for_status = MagicMock()
 
-        with patch.object(client.client, "get", new_callable=AsyncMock) as mock_get:
-            mock_get.return_value = mock_response
+        mock_http_client = MagicMock()
+        mock_http_client.get = AsyncMock(return_value=mock_response)
+        mock_http_client.__aenter__ = AsyncMock(return_value=mock_http_client)
+        mock_http_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("httpx.AsyncClient", return_value=mock_http_client):
             result = await client.get_credits()
 
         assert result == {"credits": 100.0}
+        mock_http_client.get.assert_called_once_with(
+            "https://api.bfl.ml/v1/credits",
+            headers={"x-key": "test-key"},
+        )
 
     @pytest.mark.asyncio
     async def test_close(self):

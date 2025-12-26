@@ -85,13 +85,17 @@ class BFLClient:
         raise Exception("Task timed out")
 
     async def get_credits(self) -> dict[str, Any]:
-        """Get account credit balance."""
-        response = await self.client.get(
-            "/v1/credits",
-            headers={"x-key": self.api_key},
-        )
-        response.raise_for_status()
-        return response.json()
+        """Get account credit balance.
+
+        Note: Credits endpoint is on api.bfl.ml, not api.bfl.ai
+        """
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                "https://api.bfl.ml/v1/credits",
+                headers={"x-key": self.api_key},
+            )
+            response.raise_for_status()
+            return response.json()
 
     async def close(self):
         await self.client.aclose()
