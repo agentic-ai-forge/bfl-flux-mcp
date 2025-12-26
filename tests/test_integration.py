@@ -20,8 +20,6 @@ import pytest
 
 from bfl_flux_mcp.server import (
     _check_credits,
-    _condition_generate,
-    _create_variation,
     _expand_image,
     _generate_image,
     _list_finetunes,
@@ -108,39 +106,6 @@ class TestIntegrationGenerate:
             await client.close()
 
 
-class TestIntegrationConditionGenerate:
-    """Integration tests for conditioned generation.
-
-    These require a control image. We use a simple base64 placeholder.
-    """
-
-    @pytest.mark.asyncio
-    @pytest.mark.expensive
-    async def test_condition_generate_depth_mode(self):
-        """Test depth-conditioned generation with minimal input."""
-        # Note: This will likely fail without a valid image,
-        # but verifies the endpoint is reachable
-        client = get_client()
-        try:
-            # Using a tiny valid PNG (1x1 pixel, red)
-            tiny_png_base64 = (
-                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIA"
-                "X8jx0gAAAABJRU5ErkJggg=="
-            )
-            result = await _condition_generate(
-                client,
-                {
-                    "prompt": "A colorful scene",
-                    "control_image": tiny_png_base64,
-                    "mode": "depth",
-                },
-            )
-            # May succeed or fail depending on API validation
-            assert len(result) == 1
-        finally:
-            await client.close()
-
-
 class TestIntegrationExpand:
     """Integration tests for image expansion."""
 
@@ -160,31 +125,6 @@ class TestIntegrationExpand:
                 {
                     "image": tiny_png_base64,
                     "right": 64,
-                },
-            )
-            assert len(result) == 1
-        finally:
-            await client.close()
-
-
-class TestIntegrationVariation:
-    """Integration tests for image variations."""
-
-    @pytest.mark.asyncio
-    @pytest.mark.expensive
-    async def test_create_variation_basic(self):
-        """Test variation creation with minimal input."""
-        client = get_client()
-        try:
-            # Using a tiny valid PNG
-            tiny_png_base64 = (
-                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIA"
-                "X8jx0gAAAABJRU5ErkJggg=="
-            )
-            result = await _create_variation(
-                client,
-                {
-                    "image": tiny_png_base64,
                 },
             )
             assert len(result) == 1

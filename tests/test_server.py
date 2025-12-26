@@ -8,8 +8,6 @@ import pytest
 from bfl_flux_mcp.server import (
     BFLClient,
     _check_credits,
-    _condition_generate,
-    _create_variation,
     _edit_image,
     _encode_image_to_base64,
     _expand_image,
@@ -204,9 +202,9 @@ class TestListTools:
 
     @pytest.mark.asyncio
     async def test_returns_all_tools(self):
-        """Returns all eight tools."""
+        """Returns all six tools."""
         tools = await list_tools()
-        assert len(tools) == 8
+        assert len(tools) == 6
 
     @pytest.mark.asyncio
     async def test_tool_names(self):
@@ -218,8 +216,6 @@ class TestListTools:
         assert "check_credits" in names
         assert "save_image" in names
         assert "expand_image" in names
-        assert "condition_generate" in names
-        assert "create_variation" in names
         assert "list_finetunes" in names
 
     @pytest.mark.asyncio
@@ -1068,208 +1064,6 @@ class TestExpandImage:
         assert payload["image"] == expected_base64
 
 
-class TestConditionGenerate:
-    """Tests for condition_generate tool."""
-
-    @pytest.mark.asyncio
-    async def test_basic_depth_generation(self):
-        """Basic depth-conditioned generation works."""
-        mock_client = MagicMock()
-        mock_client.submit = AsyncMock(
-            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
-        )
-        mock_client.wait_for_completion = AsyncMock(
-            return_value={
-                "status": "Ready",
-                "result": {"sample": "https://example.com/conditioned.png"},
-            }
-        )
-
-        result = await _condition_generate(
-            mock_client,
-            {"prompt": "A forest scene", "control_image": "base64data", "mode": "depth"},
-        )
-
-        assert len(result) == 1
-        assert "Conditioned image generated successfully" in result[0].text
-        assert "**Mode:** depth" in result[0].text
-
-    @pytest.mark.asyncio
-    async def test_uses_correct_endpoint_for_depth(self):
-        """Uses depth endpoint when mode is depth."""
-        mock_client = MagicMock()
-        mock_client.submit = AsyncMock(
-            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
-        )
-        mock_client.wait_for_completion = AsyncMock(
-            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
-        )
-
-        await _condition_generate(
-            mock_client, {"prompt": "test", "control_image": "data", "mode": "depth"}
-        )
-
-        call_args = mock_client.submit.call_args
-        assert call_args[0][0] == "v1/flux-depth-pro"
-
-    @pytest.mark.asyncio
-    async def test_uses_correct_endpoint_for_canny(self):
-        """Uses canny endpoint when mode is canny."""
-        mock_client = MagicMock()
-        mock_client.submit = AsyncMock(
-            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
-        )
-        mock_client.wait_for_completion = AsyncMock(
-            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
-        )
-
-        await _condition_generate(
-            mock_client, {"prompt": "test", "control_image": "data", "mode": "canny"}
-        )
-
-        call_args = mock_client.submit.call_args
-        assert call_args[0][0] == "v1/flux-canny-pro"
-
-    @pytest.mark.asyncio
-    async def test_default_mode_is_depth(self):
-        """Default mode is depth when not specified."""
-        mock_client = MagicMock()
-        mock_client.submit = AsyncMock(
-            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
-        )
-        mock_client.wait_for_completion = AsyncMock(
-            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
-        )
-
-        await _condition_generate(mock_client, {"prompt": "test", "control_image": "data"})
-
-        call_args = mock_client.submit.call_args
-        assert call_args[0][0] == "v1/flux-depth-pro"
-
-    @pytest.mark.asyncio
-    async def test_optional_params_passed(self):
-        """Optional params are passed to API."""
-        mock_client = MagicMock()
-        mock_client.submit = AsyncMock(
-            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
-        )
-        mock_client.wait_for_completion = AsyncMock(
-            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
-        )
-
-        await _condition_generate(
-            mock_client,
-            {
-                "prompt": "test",
-                "control_image": "data",
-                "aspect_ratio": "16:9",
-                "seed": 42,
-                "safety_tolerance": 3,
-            },
-        )
-
-        call_args = mock_client.submit.call_args
-        payload = call_args[0][1]
-        assert payload["aspect_ratio"] == "16:9"
-        assert payload["seed"] == 42
-        assert payload["safety_tolerance"] == 3
-
-    @pytest.mark.asyncio
-    async def test_handles_api_error(self):
-        """Handles API errors gracefully."""
-        mock_client = MagicMock()
-        mock_client.submit = AsyncMock(side_effect=Exception("API Error"))
-
-        result = await _condition_generate(
-            mock_client, {"prompt": "test", "control_image": "data"}
-        )
-
-        assert "Error" in result[0].text
-
-
-class TestCreateVariation:
-    """Tests for create_variation tool."""
-
-    @pytest.mark.asyncio
-    async def test_basic_variation(self):
-        """Basic variation creation works."""
-        mock_client = MagicMock()
-        mock_client.submit = AsyncMock(
-            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
-        )
-        mock_client.wait_for_completion = AsyncMock(
-            return_value={
-                "status": "Ready",
-                "result": {"sample": "https://example.com/variation.png"},
-            }
-        )
-
-        result = await _create_variation(mock_client, {"image": "base64data"})
-
-        assert len(result) == 1
-        assert "Variation created successfully" in result[0].text
-
-    @pytest.mark.asyncio
-    async def test_uses_correct_endpoint(self):
-        """Uses Redux endpoint."""
-        mock_client = MagicMock()
-        mock_client.submit = AsyncMock(
-            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
-        )
-        mock_client.wait_for_completion = AsyncMock(
-            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
-        )
-
-        await _create_variation(mock_client, {"image": "data"})
-
-        call_args = mock_client.submit.call_args
-        assert call_args[0][0] == "v1/flux-redux-pro"
-
-    @pytest.mark.asyncio
-    async def test_optional_prompt_passed(self):
-        """Optional prompt is passed to API."""
-        mock_client = MagicMock()
-        mock_client.submit = AsyncMock(
-            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
-        )
-        mock_client.wait_for_completion = AsyncMock(
-            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
-        )
-
-        await _create_variation(mock_client, {"image": "data", "prompt": "make it more vibrant"})
-
-        call_args = mock_client.submit.call_args
-        payload = call_args[0][1]
-        assert payload["prompt"] == "make it more vibrant"
-
-    @pytest.mark.asyncio
-    async def test_prompt_shown_in_output(self):
-        """Prompt is shown in output when provided."""
-        mock_client = MagicMock()
-        mock_client.submit = AsyncMock(
-            return_value={"id": "task-123", "polling_url": "https://api.bfl.ai/v1/get_result"}
-        )
-        mock_client.wait_for_completion = AsyncMock(
-            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
-        )
-
-        result = await _create_variation(
-            mock_client, {"image": "data", "prompt": "make it darker"}
-        )
-
-        assert "**Guidance:** make it darker" in result[0].text
-
-    @pytest.mark.asyncio
-    async def test_handles_api_error(self):
-        """Handles API errors gracefully."""
-        mock_client = MagicMock()
-        mock_client.submit = AsyncMock(side_effect=Exception("API Error"))
-
-        result = await _create_variation(mock_client, {"image": "data"})
-
-        assert "Error" in result[0].text
-
-
 class TestListFinetunes:
     """Tests for list_finetunes tool."""
 
@@ -1358,50 +1152,6 @@ class TestCallToolNewTools:
             result = await call_tool("expand_image", {"image": "data", "top": 100})
 
             assert "Image expanded successfully" in result[0].text
-
-    @pytest.mark.asyncio
-    async def test_dispatches_condition_generate(self):
-        """Dispatches to condition_generate tool."""
-        with patch("bfl_flux_mcp.server.get_client") as mock_get_client:
-            mock_client = MagicMock()
-            mock_client.submit = AsyncMock(
-                return_value={"id": "task-123", "polling_url": "https://api.bfl.ai"}
-            )
-            mock_client.wait_for_completion = AsyncMock(
-                return_value={
-                    "status": "Ready",
-                    "result": {"sample": "https://example.com/img.png"},
-                }
-            )
-            mock_client.close = AsyncMock()
-            mock_get_client.return_value = mock_client
-
-            result = await call_tool(
-                "condition_generate", {"prompt": "test", "control_image": "data"}
-            )
-
-            assert "Conditioned image generated successfully" in result[0].text
-
-    @pytest.mark.asyncio
-    async def test_dispatches_create_variation(self):
-        """Dispatches to create_variation tool."""
-        with patch("bfl_flux_mcp.server.get_client") as mock_get_client:
-            mock_client = MagicMock()
-            mock_client.submit = AsyncMock(
-                return_value={"id": "task-123", "polling_url": "https://api.bfl.ai"}
-            )
-            mock_client.wait_for_completion = AsyncMock(
-                return_value={
-                    "status": "Ready",
-                    "result": {"sample": "https://example.com/img.png"},
-                }
-            )
-            mock_client.close = AsyncMock()
-            mock_get_client.return_value = mock_client
-
-            result = await call_tool("create_variation", {"image": "data"})
-
-            assert "Variation created successfully" in result[0].text
 
     @pytest.mark.asyncio
     async def test_dispatches_list_finetunes(self):
