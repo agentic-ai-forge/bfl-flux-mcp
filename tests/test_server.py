@@ -202,9 +202,9 @@ class TestListTools:
 
     @pytest.mark.asyncio
     async def test_returns_all_tools(self):
-        """Returns all six tools."""
+        """Returns all seven tools."""
         tools = await list_tools()
-        assert len(tools) == 6
+        assert len(tools) == 7
 
     @pytest.mark.asyncio
     async def test_tool_names(self):
@@ -217,6 +217,7 @@ class TestListTools:
         assert "save_image" in names
         assert "expand_image" in names
         assert "list_finetunes" in names
+        assert "create_variation" in names
 
     @pytest.mark.asyncio
     async def test_generate_image_schema(self):
