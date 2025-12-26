@@ -46,22 +46,31 @@ class BFLClient:
         response.raise_for_status()
         return response.json()
 
-    async def get_result(self, task_id: str) -> dict[str, Any]:
+    async def get_result(self, task_id: str, polling_url: str | None = None) -> dict[str, Any]:
         """Get the result of a task."""
-        response = await self.client.get(
-            "/v1/get_result",
-            params={"id": task_id},
-            headers={"x-key": self.api_key},
-        )
+        if polling_url:
+            # Use the polling_url directly (may be on different server like api.eu2.bfl.ai)
+            response = await self.client.get(
+                polling_url,
+                headers={"x-key": self.api_key},
+            )
+        else:
+            response = await self.client.get(
+                "/v1/get_result",
+                params={"id": task_id},
+                headers={"x-key": self.api_key},
+            )
         response.raise_for_status()
         return response.json()
 
-    async def wait_for_completion(self, task_id: str) -> dict[str, Any]:
+    async def wait_for_completion(
+        self, task_id: str, polling_url: str | None = None
+    ) -> dict[str, Any]:
         """Poll until task is complete."""
         start_time = time.time()
 
         while time.time() - start_time < MAX_WAIT_TIME:
-            result = await self.get_result(task_id)
+            result = await self.get_result(task_id, polling_url)
             status = result.get("status")
 
             if status == "Ready":
@@ -349,8 +358,9 @@ async def _generate_image(client: BFLClient, args: dict[str, Any]) -> list[TextC
         # Submit and wait
         submission = await client.submit(endpoint, payload)
         task_id = submission["id"]
+        polling_url = submission.get("polling_url")
 
-        result = await client.wait_for_completion(task_id)
+        result = await client.wait_for_completion(task_id, polling_url)
 
         # Extract image URL
         image_url = _extract_image_url(result)
@@ -402,8 +412,9 @@ async def _edit_image(client: BFLClient, args: dict[str, Any]) -> list[TextConte
         # Submit and wait
         submission = await client.submit(endpoint, payload)
         task_id = submission["id"]
+        polling_url = submission.get("polling_url")
 
-        result = await client.wait_for_completion(task_id)
+        result = await client.wait_for_completion(task_id, polling_url)
 
         # Extract image URL
         image_url = _extract_image_url(result)

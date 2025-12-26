@@ -171,7 +171,9 @@ class TestGenerateImage:
     async def test_basic_generation(self):
         """Basic image generation works."""
         mock_client = MagicMock()
-        mock_client.submit = AsyncMock(return_value={"id": "task-123"})
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.eu2.bfl.ai/v1/get_result?id=task-123"}
+        )
         mock_client.wait_for_completion = AsyncMock(
             return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
         )
@@ -186,7 +188,9 @@ class TestGenerateImage:
     async def test_uses_correct_endpoint_for_model(self):
         """Uses correct API endpoint for each model."""
         mock_client = MagicMock()
-        mock_client.submit = AsyncMock(return_value={"id": "task-123"})
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.eu2.bfl.ai/v1/get_result?id=task-123"}
+        )
         mock_client.wait_for_completion = AsyncMock(
             return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
         )
@@ -205,7 +209,9 @@ class TestGenerateImage:
     async def test_prompt_upsampling_passed(self):
         """prompt_upsampling is passed to API."""
         mock_client = MagicMock()
-        mock_client.submit = AsyncMock(return_value={"id": "task-123"})
+        mock_client.submit = AsyncMock(
+            return_value={"id": "task-123", "polling_url": "https://api.eu2.bfl.ai/v1/get_result?id=task-123"}
+        )
         mock_client.wait_for_completion = AsyncMock(
             return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
         )
@@ -214,6 +220,21 @@ class TestGenerateImage:
 
         call_args = mock_client.submit.call_args
         assert call_args[0][1]["prompt_upsampling"] is True
+
+    @pytest.mark.asyncio
+    async def test_polling_url_passed_to_wait(self):
+        """polling_url from submit is passed to wait_for_completion."""
+        mock_client = MagicMock()
+        polling_url = "https://api.eu2.bfl.ai/v1/get_result?id=task-123"
+        mock_client.submit = AsyncMock(return_value={"id": "task-123", "polling_url": polling_url})
+        mock_client.wait_for_completion = AsyncMock(
+            return_value={"status": "Ready", "result": {"sample": "https://example.com/img.png"}}
+        )
+
+        await _generate_image(mock_client, {"prompt": "test"})
+
+        # Verify polling_url was passed
+        mock_client.wait_for_completion.assert_called_once_with("task-123", polling_url)
 
     @pytest.mark.asyncio
     async def test_handles_api_error(self):
