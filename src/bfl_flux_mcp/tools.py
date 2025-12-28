@@ -166,9 +166,7 @@ def _edit_image_tool() -> Tool:
                 },
                 "image": {
                     "type": "string",
-                    "description": (
-                        "Image to edit: local file path, URL, or base64-encoded data"
-                    ),
+                    "description": ("Image to edit: local file path, URL, or base64-encoded data"),
                 },
                 "model": {
                     "type": "string",

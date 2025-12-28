@@ -64,9 +64,7 @@ class BFLClient:
         response.raise_for_status()
         return response.json()
 
-    async def get_result(
-        self, task_id: str, polling_url: str | None = None
-    ) -> dict[str, Any]:
+    async def get_result(self, task_id: str, polling_url: str | None = None) -> dict[str, Any]:
         """Get the result of a task.
 
         Args:

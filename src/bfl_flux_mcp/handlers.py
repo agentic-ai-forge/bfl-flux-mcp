@@ -84,8 +84,7 @@ async def handle_save_image(args: dict[str, Any]) -> list[TextContent]:
                     TextContent(
                         type="text",
                         text=(
-                            f"Error: URL does not point to an image "
-                            f"(content-type: {content_type})"
+                            f"Error: URL does not point to an image (content-type: {content_type})"
                         ),
                     )
                 ]
@@ -109,9 +108,7 @@ async def handle_save_image(args: dict[str, Any]) -> list[TextContent]:
         return [TextContent(type="text", text=f"Error saving image: {e!s}")]
 
 
-async def handle_generate_image(
-    client: BFLClient, args: dict[str, Any]
-) -> list[TextContent]:
+async def handle_generate_image(client: BFLClient, args: dict[str, Any]) -> list[TextContent]:
     """Handle generate_image tool.
 
     Args:
@@ -177,9 +174,7 @@ async def handle_generate_image(
         return [format_error_response(str(e))]
 
 
-async def handle_edit_image(
-    client: BFLClient, args: dict[str, Any]
-) -> list[TextContent]:
+async def handle_edit_image(client: BFLClient, args: dict[str, Any]) -> list[TextContent]:
     """Handle edit_image tool.
 
     Args:
@@ -238,9 +233,7 @@ async def handle_edit_image(
         return [format_error_response(str(e))]
 
 
-async def handle_expand_image(
-    client: BFLClient, args: dict[str, Any]
-) -> list[TextContent]:
+async def handle_expand_image(client: BFLClient, args: dict[str, Any]) -> list[TextContent]:
     """Handle expand_image tool (outpainting).
 
     Args:
@@ -347,9 +340,7 @@ async def handle_list_finetunes(client: BFLClient) -> list[TextContent]:
         return [TextContent(type="text", text=f"Error listing finetunes: {e!s}")]
 
 
-async def handle_create_variation(
-    client: BFLClient, args: dict[str, Any]
-) -> list[TextContent]:
+async def handle_create_variation(client: BFLClient, args: dict[str, Any]) -> list[TextContent]:
     """Handle create_variation tool using image_prompt for Redux-style variations.
 
     Args:

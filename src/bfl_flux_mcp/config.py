@@ -39,7 +39,6 @@ def get_settings() -> Settings:
     except Exception as e:
         if "api_key" in str(e).lower():
             raise ValueError(
-                "BFL_API_KEY environment variable is required. "
-                "Get your key at https://api.bfl.ml"
+                "BFL_API_KEY environment variable is required. Get your key at https://api.bfl.ml"
             ) from e
         raise
